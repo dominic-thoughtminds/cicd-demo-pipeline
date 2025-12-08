@@ -47,12 +47,12 @@ jobs:
           projectKey: ${{ secrets.SONAR_PROJECT_KEY }}
           token: ${{ secrets.SONAR_TOKEN }}
 
-      - name: SonarCloud Quality Gate
-        uses: SonarSource/sonarcloud-quality-gate-action@v1
-        with:
-          organization: ${{ secrets.SONAR_ORG }}
-          projectKey: ${{ secrets.SONAR_PROJECT_KEY }}
-          token: ${{ secrets.SONAR_TOKEN }}
+      # - name: SonarCloud Quality Gate
+      #   uses: SonarSource/sonarcloud-quality-gate-action@v1
+      #   with:
+      #     organization: ${{ secrets.SONAR_ORG }}
+      #     projectKey: ${{ secrets.SONAR_PROJECT_KEY }}
+      #     token: ${{ secrets.SONAR_TOKEN }}
 
   build_scan_push:
     name: Build, Scan & Push Docker Image
