@@ -131,6 +131,7 @@ jobs:
         run: |
           IMAGE=$(cut -d'=' -f2 image_info.txt)
           echo "Deploying $IMAGE to STAGING"
+          az containerapp list -g nexus-sol-rg -o table
           az containerapp update \
             --name test-staging-app \
             --resource-group ${{ secrets.AZURE_RESOURCE_GROUP }} \
