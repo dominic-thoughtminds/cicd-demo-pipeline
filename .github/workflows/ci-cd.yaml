@@ -1,0 +1,180 @@
+name: CI/CD Pipeline
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+env:
+  IMAGE_NAME: demo-app
+
+jobs:
+  test_and_analyze:
+    name: Unit Tests + SonarCloud
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install coverage pytest
+
+      - name: Run unit tests with coverage
+        run: |
+          coverage run -m pytest
+          coverage xml -o coverage.xml
+
+      - name: Set up JDK (required by SonarCloud)
+        uses: actions/setup-java@v4
+        with:
+          java-version: "17"
+          distribution: "temurin"
+
+      - name: SonarCloud Scan
+        uses: SonarSource/sonarcloud-github-action@v3
+        with:
+          organization: ${{ secrets.SONAR_ORG }}
+          projectKey: ${{ secrets.SONAR_PROJECT_KEY }}
+          token: ${{ secrets.SONAR_TOKEN }}
+
+      - name: SonarCloud Quality Gate
+        uses: SonarSource/sonarcloud-quality-gate-action@v1
+        with:
+          organization: ${{ secrets.SONAR_ORG }}
+          projectKey: ${{ secrets.SONAR_PROJECT_KEY }}
+          token: ${{ secrets.SONAR_TOKEN }}
+
+  build_scan_push:
+    name: Build, Scan & Push Docker Image
+    runs-on: ubuntu-latest
+    needs: test_and_analyze
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Login to Azure
+        uses: azure/login@v1
+        with:
+          creds: ${{ secrets.AZURE_CREDENTIALS }}
+
+      - name: Login to ACR
+        run: az acr login --name ${{ secrets.ACR_NAME }}
+
+      - name: Set image tag
+        id: tag
+        run: |
+          TAG=sha-${GITHUB_SHA::8}
+          echo "image_tag=$TAG" >> $GITHUB_OUTPUT
+
+      - name: Build Docker image
+        run: |
+          IMAGE=${{ secrets.ACR_LOGIN_SERVER }}/${{ env.IMAGE_NAME }}:${{ steps.tag.outputs.image_tag }}
+          echo "Building image $IMAGE"
+          docker build -t "$IMAGE" .
+
+      - name: Trivy image scan
+        uses: aquasecurity/trivy-action@v0.6.0
+        with:
+          image-ref: ${{ secrets.ACR_LOGIN_SERVER }}/${{ env.IMAGE_NAME }}:${{ steps.tag.outputs.image_tag }}
+          severity: HIGH,CRITICAL
+          ignore-unfixed: true
+          exit-code: 1
+          format: table
+
+      - name: Push image to ACR
+        run: |
+          IMAGE=${{ secrets.ACR_LOGIN_SERVER }}/${{ env.IMAGE_NAME }}:${{ steps.tag.outputs.image_tag }}
+          echo "Pushing image $IMAGE"
+          docker push "$IMAGE"
+
+      - name: Store image info artifact
+        run: |
+          echo "IMAGE=${{ secrets.ACR_LOGIN_SERVER }}/${{ env.IMAGE_NAME }}:${{ steps.tag.outputs.image_tag }}" > image_info.txt
+
+      - name: Upload image info artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: image-info
+          path: image_info.txt
+
+  deploy_staging:
+    name: Deploy to Staging
+    runs-on: ubuntu-latest
+    needs: build_scan_push
+
+    steps:
+      - name: Download image info
+        uses: actions/download-artifact@v4
+        with:
+          name: image-info
+
+      - name: Show image info
+        run: cat image_info.txt
+
+      - name: Login to Azure
+        uses: azure/login@v1
+        with:
+          creds: ${{ secrets.AZURE_CREDENTIALS }}
+
+      - name: Deploy image to staging Container App
+        run: |
+          IMAGE=$(cut -d'=' -f2 image_info.txt)
+          echo "Deploying $IMAGE to STAGING"
+          az containerapp update \
+            --name ${{ secrets.CA_STAGING_NAME }} \
+            --resource-group ${{ secrets.AZURE_RESOURCE_GROUP }} \
+            --image "$IMAGE"
+
+      - name: Smoke test staging
+        run: |
+          echo "Waiting for staging to be ready..."
+          sleep 20
+          curl --fail ${{ secrets.CA_STAGING_URL }}/health
+
+  deploy_prod:
+    name: Deploy to Production
+    runs-on: ubuntu-latest
+    needs: deploy_staging
+    environment:
+      name: production   # configure approvals for this environment in GitHub
+      url: ${{ secrets.CA_PROD_URL }}
+
+    steps:
+      - name: Download image info
+        uses: actions/download-artifact@v4
+        with:
+          name: image-info
+
+      - name: Show image info
+        run: cat image_info.txt
+
+      - name: Login to Azure
+        uses: azure/login@v1
+        with:
+          creds: ${{ secrets.AZURE_CREDENTIALS }}
+
+      - name: Deploy image to PROD Container App
+        run: |
+          IMAGE=$(cut -d'=' -f2 image_info.txt)
+          echo "Deploying $IMAGE to PROD"
+          az containerapp update \
+            --name ${{ secrets.CA_PROD_NAME }} \
+            --resource-group ${{ secrets.AZURE_RESOURCE_GROUP }} \
+            --image "$IMAGE"
+
+      - name: Smoke test production
+        run: |
+          echo "Waiting for prod to be ready..."
+          sleep 20
+          curl --fail ${{ secrets.CA_PROD_URL }}/health
