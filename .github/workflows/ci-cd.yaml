@@ -42,10 +42,10 @@ jobs:
 
       - name: SonarCloud Scan
         uses: SonarSource/sonarcloud-github-action@v3
-        with:
-          organization: ${{ secrets.SONAR_ORG }}
-          projectKey: ${{ secrets.SONAR_PROJECT_KEY }}
-          token: ${{ secrets.SONAR_TOKEN }}
+        env:
+          # organization: ${{ secrets.SONAR_ORG }}
+          # projectKey: ${{ secrets.SONAR_PROJECT_KEY }}
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
 
       # - name: SonarCloud Quality Gate
       #   uses: SonarSource/sonarcloud-quality-gate-action@v1
