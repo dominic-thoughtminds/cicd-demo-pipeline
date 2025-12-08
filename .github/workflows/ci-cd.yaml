@@ -132,7 +132,7 @@ jobs:
           IMAGE=$(cut -d'=' -f2 image_info.txt)
           echo "Deploying $IMAGE to STAGING"
           az containerapp update \
-            --name ${{ secrets.CA_STAGING_NAME }} \
+            --name test-staging-app \
             --resource-group ${{ secrets.AZURE_RESOURCE_GROUP }} \
             --image "$IMAGE"
 
