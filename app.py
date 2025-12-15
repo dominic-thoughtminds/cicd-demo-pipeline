@@ -9,7 +9,7 @@ def health():
 
 @app.get("/")
 def hello():
-    return {"message": "Hello from demo app"}
+    return {"message": "Hello from demo app 2!"}
 
 if __name__ == "__main__":
     import uvicorn
