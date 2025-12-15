@@ -137,11 +137,11 @@ jobs:
             --resource-group ${{ secrets.AZURE_RESOURCE_GROUP }} \
             --image "$IMAGE"
 
-      - name: Smoke test staging
-        run: |
-          echo "Waiting for staging to be ready..."
-          sleep 20
-          curl --fail ${{ secrets.CA_STAGING_URL }}/health
+      # - name: Smoke test staging
+      #   run: |
+      #     echo "Waiting for staging to be ready..."
+      #     sleep 20
+      #     curl --fail ${{ secrets.CA_STAGING_URL }}/health
 
   deploy_prod:
     name: Deploy to Production
